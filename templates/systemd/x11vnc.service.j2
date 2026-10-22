@@ -1,0 +1,19 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=x11vnc: the live desktop over VNC, on localhost only (noVNC is the way in)
+PartOf=agent-browser.target
+
+[Service]
+ExecStart=/usr/bin/x11vnc \
+  -display ${DISPLAY} \
+  -passwdfile {{ agent_browser_config_dir }}/vnc.passwd \
+  -localhost \
+  -rfbport 5900 \
+  -forever \
+  -shared \
+  -noxdamage
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

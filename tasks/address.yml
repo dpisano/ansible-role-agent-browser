@@ -1,0 +1,24 @@
+---
+# Waits for the guest agent to report the VM's LAN address (not loopback, not
+# its Tailscale address).
+- name: Wait for the guest agent to report an address
+  ansible.builtin.command: qm guest cmd {{ agent_browser_vmid }} network-get-interfaces
+  register: agent_browser_nics
+  until: agent_browser_nics.rc == 0 and agent_browser_nics.stdout is regex(agent_browser_ipv4_regex)
+  retries: "{{ agent_browser_boot_retries }}"
+  delay: "{{ agent_browser_boot_delay }}"
+  changed_when: false
+  failed_when: false
+
+- name: Fail if the VM never came up
+  ansible.builtin.fail:
+    msg: >-
+      {{ agent_browser_vm_name }} never reported an IPv4 address. cloud-init installs the
+      guest agent on first boot: look at the VM's console in Proxmox and
+      /var/log/cloud-init-output.log. No network (bridge, VLAN, DHCP) or a failed package
+      install are the usual causes.
+  when: agent_browser_nics.rc != 0 or agent_browser_nics.stdout is not regex(agent_browser_ipv4_regex)
+
+- name: Remember the VM's address
+  ansible.builtin.set_fact:
+    agent_browser_vm_ip: "{{ agent_browser_nics.stdout | regex_search(agent_browser_ipv4_regex, '\\1') | first }}"

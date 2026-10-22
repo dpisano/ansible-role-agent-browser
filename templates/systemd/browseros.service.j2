@@ -1,0 +1,20 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=BrowserOS, with its MCP server on localhost:{{ agent_browser_browseros_mcp_port }}
+PartOf=agent-browser.target
+
+[Service]
+{% if agent_browser_gpu_mapping | length > 0 %}
+Environment=DRI_PRIME=1
+{% endif %}
+ExecStart=/usr/bin/browseros \
+  --browseros-mcp-port={{ agent_browser_browseros_mcp_port }} \
+  --user-data-dir={{ agent_browser_browseros_profile_dir }} \
+  --no-first-run \
+  --no-default-browser-check \
+  --password-store=basic
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

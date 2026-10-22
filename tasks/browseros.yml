@@ -1,0 +1,11 @@
+---
+- name: Download BrowserOS {{ agent_browser_browseros_version }}
+  ansible.builtin.get_url:
+    url: "{{ agent_browser_browseros_url }}"
+    dest: /var/cache/apt/archives/browseros_{{ agent_browser_browseros_version }}_amd64.deb
+    mode: "0644"
+
+- name: Install BrowserOS
+  ansible.builtin.apt:
+    deb: /var/cache/apt/archives/browseros_{{ agent_browser_browseros_version }}_amd64.deb
+    state: present

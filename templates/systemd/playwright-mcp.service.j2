@@ -1,0 +1,20 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=Playwright MCP, attached to Brave over CDP (HTTP on port {{ agent_browser_playwright_mcp_port }})
+PartOf=agent-browser.target
+After=brave.service
+
+[Service]
+# Listens on every interface; the firewall only lets Tailscale in. --allowed-hosts=*
+# turns off its Host-header check, which would otherwise only accept localhost.
+ExecStart=/usr/local/bin/playwright-mcp \
+  --cdp-endpoint http://127.0.0.1:{{ agent_browser_brave_cdp_port }} \
+  --host 0.0.0.0 \
+  --port {{ agent_browser_playwright_mcp_port }} \
+  --allowed-hosts=* \
+  --output-dir %h/playwright-mcp-output
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

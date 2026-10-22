@@ -1,0 +1,95 @@
+---
+# Runs on the Proxmox node. Decides what to do from the VM's state:
+#   absent   create it
+#   ours     created by this role earlier (agent-browser tag): start it if it
+#            is stopped; provisioning runs again either way, it is idempotent
+#   foreign  a VM this role did not create: refuse, always
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - agent_browser_timezone | length > 0
+    fail_msg: >-
+      Set agent_browser_timezone to the time zone your internet address is in
+      (e.g. America/New_York): a browser whose time zone disagrees with its IP
+      is a bot signal.
+    quiet: true
+
+- name: Look up VMID {{ agent_browser_vmid }}
+  ansible.builtin.command: qm config {{ agent_browser_vmid }}
+  register: agent_browser_existing
+  changed_when: false
+  failed_when: false
+
+- name: Work out the VM's state
+  ansible.builtin.set_fact:
+    agent_browser_vm_state: >-
+      {{ 'absent' if agent_browser_existing.rc != 0
+         else 'ours' if agent_browser_existing.stdout is search('(?m)^tags:.*\b' ~ agent_browser_tag ~ '\b')
+         else 'foreign' }}
+
+- name: Refuse to touch a VM this role did not create
+  ansible.builtin.fail:
+    msg: >-
+      VMID {{ agent_browser_vmid }} exists and has no {{ agent_browser_tag }} tag, so it was
+      not created by this role. Pick another agent_browser_vmid, or remove it yourself
+      with `qm destroy {{ agent_browser_vmid }}`.
+  when: agent_browser_vm_state == 'foreign'
+
+- name: Check the GPU mapping exists
+  when: agent_browser_gpu_mapping | length > 0
+  block:
+    - name: Read the PCI resource mappings
+      ansible.builtin.command: pvesh get /cluster/mapping/pci --output-format json
+      register: agent_browser_pci_mappings
+      changed_when: false
+
+    - name: Fail if the mapping is missing
+      ansible.builtin.assert:
+        that: agent_browser_gpu_mapping in (agent_browser_pci_mappings.stdout | from_json | map(attribute='id') | list)
+        fail_msg: >-
+          No PCI resource mapping named {{ agent_browser_gpu_mapping }} (Datacenter > Resource
+          Mappings). Those that exist: {{ agent_browser_pci_mappings.stdout | from_json | map(attribute='id') | join(', ') }}
+        quiet: true
+
+- name: Create the VM
+  when: agent_browser_vm_state == 'absent' or agent_browser_rebuild | bool
+  block:
+    - name: Destroy the old VM
+      ansible.builtin.shell: |
+        qm stop {{ agent_browser_vmid }} --skiplock 2>/dev/null || true
+        qm destroy {{ agent_browser_vmid }} --purge
+      changed_when: true
+      when: agent_browser_vm_state == 'ours'
+
+    - name: Create and boot the VM
+      ansible.builtin.include_tasks: vm-create.yml
+
+- name: Start the VM
+  when: agent_browser_vm_state == 'ours' and not agent_browser_rebuild | bool
+  block:
+    - name: Read the VM's state
+      ansible.builtin.command: qm status {{ agent_browser_vmid }}
+      register: agent_browser_status
+      changed_when: false
+
+    - name: Start the VM if it is stopped
+      ansible.builtin.command: qm start {{ agent_browser_vmid }}
+      changed_when: true
+      when: "'running' not in agent_browser_status.stdout"
+
+- name: Wait for the VM's address
+  ansible.builtin.include_tasks: address.yml
+
+- name: Add the VM to the in-memory group
+  ansible.builtin.add_host:
+    name: "{{ agent_browser_vm_name }}"
+    groups: agent_browser_build
+    ansible_host: "{{ agent_browser_vm_ip }}"
+    ansible_user: "{{ agent_browser_image_user }}"
+    ansible_become: true
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: >-
+      -o ProxyJump=root@{{ ansible_host | default(inventory_hostname) }}
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    agent_browser_vm_ip: "{{ agent_browser_vm_ip }}"
+    agent_browser_pve_node: "{{ inventory_hostname }}"

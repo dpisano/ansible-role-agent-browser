@@ -1,0 +1,26 @@
+#!/bin/bash
+# Managed by Ansible (agent-browser role). Started by XFCE's autostart when the
+# desktop user logs in: sets up the screen, starts agent-browser.target (the
+# browsers, MCP servers and VNC) and stops it when the X session ends.
+set -u
+
+# Resolution, on whichever output the virtual display has connected.
+output=$(xrandr --query | awk '/ connected/ {print $1; exit}')
+if [ -n "$output" ]; then
+  xrandr --output "$output" --mode {{ agent_browser_resolution }} 2>/dev/null \
+    || xrandr --output "$output" --auto
+fi
+
+# Never blank or power down the screen: noVNC and the agent need to see it.
+xset s off -dpms s noblank
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -n -t bool -s false 2>/dev/null
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -n -t int -s 0 2>/dev/null
+
+systemctl --user import-environment DISPLAY XAUTHORITY
+systemctl --user daemon-reload
+systemctl --user restart agent-browser.target
+
+while xset q >/dev/null 2>&1; do
+  sleep 10
+done
+systemctl --user stop agent-browser.target

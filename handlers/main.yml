@@ -1,0 +1,8 @@
+---
+# Ends the desktop session; LightDM logs the user straight back in, and the
+# session script reloads and starts the user services (browsers, MCP servers,
+# VNC) with the new settings.
+- name: Restart the desktop session
+  ansible.builtin.systemd:
+    name: lightdm
+    state: restarted

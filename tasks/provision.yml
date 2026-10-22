@@ -1,0 +1,55 @@
+---
+# Runs inside the VM (group agent_browser_build), over SSH through the node.
+# Every step is idempotent: run the playbook again to apply changes.
+- name: Wait for SSH
+  ansible.builtin.wait_for_connection:
+    timeout: 300
+  vars:
+    ansible_become: false
+
+- name: Check the secrets
+  ansible.builtin.assert:
+    that:
+      - agent_browser_vnc_password | length > 0
+      - not agent_browser_camoufox_enabled | bool or agent_browser_camofox_mcp_api_key | length >= 32
+    fail_msg: >-
+      Set agent_browser_vnc_password (the noVNC password) and, with Camoufox enabled,
+      agent_browser_camofox_mcp_api_key (32+ characters, the bearer token MCP clients send to camofox-mcp).
+    quiet: true
+
+- name: Wait for cloud-init to finish
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  failed_when: false
+
+- name: Base system
+  ansible.builtin.include_tasks: base.yml
+
+- name: Desktop
+  ansible.builtin.include_tasks: desktop.yml
+
+- name: Node.js and the MCP servers
+  ansible.builtin.include_tasks: mcp.yml
+
+- name: Brave
+  ansible.builtin.include_tasks: brave.yml
+
+- name: BrowserOS
+  ansible.builtin.include_tasks: browseros.yml
+  when: agent_browser_browseros_enabled | bool
+
+- name: Camoufox
+  ansible.builtin.include_tasks: camoufox.yml
+  when: agent_browser_camoufox_enabled | bool
+
+- name: Session services and remote access
+  ansible.builtin.include_tasks: session.yml
+
+- name: Firewall
+  ansible.builtin.include_tasks: firewall.yml
+
+- name: Apply changes to the desktop session
+  ansible.builtin.meta: flush_handlers
+
+- name: Check everything answers
+  ansible.builtin.include_tasks: verify.yml

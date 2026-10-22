@@ -1,0 +1,93 @@
+---
+# linux-generic brings linux-modules-extra (the xe GPU and HDA sound drivers)
+# and linux-firmware (the GPU's GuC firmware), which the cloud image's kernel
+# packages leave out.
+- name: Install the kernel extras, firmware and base tools
+  ansible.builtin.apt:
+    name:
+      - linux-generic
+      - acl             # lets Ansible run tasks as the desktop user
+      - curl
+      - jq
+      - unzip
+      - socat
+      - ufw
+      - systemd-container   # machinectl, to reach the desktop user's services
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Check whether a reboot is needed
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: agent_browser_reboot_required
+
+- name: Reboot into the new kernel
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when: agent_browser_reboot_required.stat.exists
+
+- name: Set the time zone
+  community.general.timezone:
+    name: "{{ agent_browser_timezone }}"
+
+- name: Generate the locale
+  community.general.locale_gen:
+    name: "{{ agent_browser_locale }}"
+    state: present
+
+- name: Read the system locale
+  ansible.builtin.command: localectl status
+  register: agent_browser_localectl
+  changed_when: false
+
+- name: Set the system locale
+  ansible.builtin.command: localectl set-locale LANG={{ agent_browser_locale }}
+  changed_when: true
+  when: ("LANG=" ~ agent_browser_locale) not in agent_browser_localectl.stdout
+
+- name: Create the autologin group
+  ansible.builtin.group:
+    name: autologin
+    system: true
+
+- name: Create the desktop user
+  ansible.builtin.user:
+    name: "{{ agent_browser_user }}"
+    shell: /bin/bash
+    groups: [audio, video, render, autologin]
+    append: true
+
+# For chrome-devtools-mcp, which MCP clients start over SSH as this user.
+- name: Create the desktop user's .ssh directory
+  ansible.builtin.file:
+    path: "/home/{{ agent_browser_user }}/.ssh"
+    state: directory
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0700"
+
+- name: Authorize the SSH key for the desktop user
+  ansible.builtin.lineinfile:
+    path: "/home/{{ agent_browser_user }}/.ssh/authorized_keys"
+    line: "{{ agent_browser_ssh_public_key }}"
+    create: true
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0600"
+
+- name: Create the user's config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0700"
+  loop:
+    - "/home/{{ agent_browser_user }}/.config"
+    - "{{ agent_browser_config_dir }}"
+    - "/home/{{ agent_browser_user }}/.config/systemd"
+    - "{{ agent_browser_unit_dir }}"
+    - "/home/{{ agent_browser_user }}/.config/autostart"

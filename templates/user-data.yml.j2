@@ -1,0 +1,9 @@
+#cloud-config
+# First-boot user-data for {{ agent_browser_vm_name }}; Ansible does the rest.
+hostname: {{ agent_browser_vm_name }}
+manage_etc_hosts: true
+ssh_authorized_keys:
+  - {{ agent_browser_ssh_public_key }}
+runcmd:
+  - apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-guest-agent
+  - systemctl enable --now qemu-guest-agent

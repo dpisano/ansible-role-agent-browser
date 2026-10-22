@@ -1,0 +1,83 @@
+---
+# Checks that the session came up and every service answers, then reports what
+# WebGL renderer Brave gets.
+- name: Wait for each service to listen
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item.port }}"
+    timeout: 180
+  loop: "{{ agent_browser_checks }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.port }})"
+  register: agent_browser_listen
+  failed_when: false
+
+- name: Fail if a service is not listening
+  ansible.builtin.fail:
+    msg: >-
+      Not listening: {{ agent_browser_listen.results | rejectattr('state', 'defined')
+      | map(attribute='item.name') | join(', ') }}. See `journalctl --user -u <service>` as
+      {{ agent_browser_user }} (e.g. `sudo machinectl shell {{ agent_browser_user }}@`), and the
+      Proxmox console to check the desktop logged in.
+  when: agent_browser_listen.results | rejectattr('state', 'defined') | list | length > 0
+
+- name: Copy the WebGL check
+  ansible.builtin.copy:
+    src: webgl-renderer.js
+    dest: /usr/local/lib/agent-browser-webgl-renderer.js
+    mode: "0644"
+
+- name: Ask Brave which WebGL renderer it gets
+  ansible.builtin.command: >-
+    node /usr/local/lib/agent-browser-webgl-renderer.js http://127.0.0.1:{{ agent_browser_brave_cdp_port }}
+  environment:
+    NODE_PATH: /usr/local/lib/node_modules/@playwright/mcp/node_modules
+  become: true
+  become_user: "{{ agent_browser_user }}"
+  register: agent_browser_webgl
+  changed_when: false
+  failed_when: agent_browser_webgl.rc != 0
+
+- name: Report the WebGL renderer
+  ansible.builtin.debug:
+    msg: "Brave's WebGL renderer: {{ agent_browser_webgl.stdout }}"
+
+- name: Fail if Brave renders on the CPU although there is a GPU
+  ansible.builtin.fail:
+    msg: >-
+      {{ agent_browser_gpu_mapping }} is passed to the VM, but Brave's WebGL renderer is
+      "{{ agent_browser_webgl.stdout }}", a software one. Check the VF is there
+      (`ls /dev/dri`, `lspci -k` shows the xe driver), and that
+      `DRI_PRIME=1 glxinfo -B` as {{ agent_browser_user }} on the desktop shows the Intel GPU.
+  when:
+    - agent_browser_gpu_mapping | length > 0
+    - agent_browser_webgl.stdout is search('(?i)llvmpipe|swiftshader|software')
+
+- name: Read the VM's Tailscale name
+  ansible.builtin.command: tailscale status --json
+  register: agent_browser_ts
+  changed_when: false
+  failed_when: false
+
+- name: Say how to connect
+  vars:
+    agent_browser_ts_name: >-
+      {{ (agent_browser_ts.stdout | from_json).Self.DNSName | default('') | regex_replace('\\.$', '')
+         if agent_browser_ts.rc == 0 and (agent_browser_ts.stdout | from_json).BackendState | default('') == 'Running'
+         else '' }}
+    agent_browser_host: "{{ agent_browser_ts_name if agent_browser_ts_name | length > 0 else '<tailscale-name>' }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ '' if agent_browser_ts_name | length > 0 else
+         'Not on the tailnet yet: run `sudo tailscale up` on the VM (LAN address ' ~ agent_browser_vm_ip ~ '), then use its Tailscale name below. ' }}
+      noVNC: http://{{ agent_browser_host }}:{{ agent_browser_novnc_port }}/vnc.html |
+      Playwright MCP (Brave): claude mcp add --transport http brave http://{{ agent_browser_host }}:{{ agent_browser_playwright_mcp_port }}/mcp |
+      chrome-devtools-mcp (Brave): claude mcp add brave-devtools -- ssh {{ agent_browser_user }}@{{ agent_browser_host }}
+      chrome-devtools-mcp --browser-url=http://127.0.0.1:{{ agent_browser_brave_cdp_port }}
+      {%- if agent_browser_browseros_enabled | bool %} |
+      BrowserOS: claude mcp add --transport http browseros http://{{ agent_browser_host }}:{{ agent_browser_browseros_mcp_public_port }}/mcp
+      {%- endif %}
+      {%- if agent_browser_camoufox_enabled | bool %} |
+      Camoufox: claude mcp add --transport http camoufox http://{{ agent_browser_host }}:{{ agent_browser_camofox_mcp_port }}/mcp
+      --header "Authorization: Bearer <AGENT_BROWSER_CAMOFOX_MCP_API_KEY>"
+      {%- endif %}

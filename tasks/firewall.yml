@@ -1,0 +1,33 @@
+---
+# The MCP servers and noVNC have no authentication of their own (camofox-mcp
+# aside): whoever reaches them controls the browsers and every site they are
+# signed in to. Only Tailscale gets in, plus SSH from the LAN for Ansible.
+- name: Allow SSH from the LAN
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    from_ip: "{{ item }}"
+  loop: "{{ agent_browser_ssh_allow_from }}"
+
+- name: Allow SSH, noVNC and the MCP servers over Tailscale
+  community.general.ufw:
+    rule: allow
+    interface: tailscale0
+    direction: in
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ agent_browser_tailscale_ports }}"
+
+# Direct (peer-to-peer) Tailscale connections instead of relays.
+- name: Allow Tailscale's WireGuard port
+  community.general.ufw:
+    rule: allow
+    port: "41641"
+    proto: udp
+
+- name: Enable the firewall, denying everything else coming in
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

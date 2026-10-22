@@ -1,0 +1,24 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=Brave, with DevTools (CDP) on localhost:{{ agent_browser_brave_cdp_port }}
+PartOf=agent-browser.target
+
+[Service]
+{% if agent_browser_gpu_mapping | length > 0 %}
+Environment=DRI_PRIME=1
+{% endif %}
+# A dedicated profile directory: Chromium refuses the DevTools port on the
+# default one. Remote debugging listens on 127.0.0.1 only.
+ExecStart=/usr/bin/brave-browser \
+  --remote-debugging-port={{ agent_browser_brave_cdp_port }} \
+  --user-data-dir={{ agent_browser_brave_profile_dir }} \
+  --no-first-run \
+  --no-default-browser-check \
+  --password-store=basic{% for arg in agent_browser_brave_extra_args %} \
+  {{ arg }}{% endfor %}
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

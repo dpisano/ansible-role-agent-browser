@@ -1,0 +1,20 @@
+---
+# Ubuntu 26.04's own Node.js 22, which every package below supports.
+- name: Install Node.js and npm
+  ansible.builtin.apt:
+    name: [nodejs, npm]
+    state: present
+
+# Playwright MCP attaches to the running Brave over CDP and is served over HTTP.
+# chrome-devtools-mcp is stdio only: MCP clients start it over SSH.
+- name: Install Playwright MCP and chrome-devtools-mcp
+  community.general.npm:
+    name: "{{ item.name }}"
+    version: "{{ item.version }}"
+    global: true
+  loop:
+    - { name: "@playwright/mcp", version: "{{ agent_browser_playwright_mcp_version }}" }
+    - { name: chrome-devtools-mcp, version: "{{ agent_browser_chrome_devtools_mcp_version }}" }
+  loop_control:
+    label: "{{ item.name }}@{{ item.version }}"
+  notify: Restart the desktop session
