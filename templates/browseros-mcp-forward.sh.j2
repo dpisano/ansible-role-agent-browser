@@ -1,0 +1,13 @@
+#!/bin/bash
+# Managed by Ansible (agent-browser role). BrowserOS picks its MCP server's port
+# itself (9200, or the next one up when that is taken) and records it in
+# config.json, so look it up on every connection instead of assuming one.
+set -u
+config="{{ agent_browser_browseros_profile_dir }}/.browseros/config.json"
+
+if [ "${1:-}" = "--connect" ]; then
+  port=$(jq -r '.ports.server // empty' "$config" 2>/dev/null)
+  exec socat - "TCP:127.0.0.1:${port:-{{ agent_browser_browseros_mcp_port }}}"
+fi
+
+exec socat "TCP-LISTEN:{{ agent_browser_browseros_mcp_public_port }},fork,reuseaddr" "EXEC:$0 --connect"
