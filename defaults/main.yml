@@ -93,8 +93,10 @@ agent_browser_browseros_version: 0.51.0
 agent_browser_browseros_url: >-
   https://github.com/browseros-ai/BrowserOS/releases/download/v{{ agent_browser_browseros_version
   }}/BrowserOS_v{{ agent_browser_browseros_version }}_amd64.deb
-# BrowserOS's built-in MCP server listens on localhost at this port; socat
-# forwards agent_browser_browseros_mcp_public_port to it.
+# BrowserOS's MCP server starts at this port but takes the next one up when it
+# is busy, and records the one it got in its config.json. The forwarder and the
+# check read it from there; this is only the fallback.
+# socat forwards agent_browser_browseros_mcp_public_port to it.
 agent_browser_browseros_mcp_port: 9200
 agent_browser_browseros_mcp_public_port: 9240
 agent_browser_browseros_profile_dir: "/home/{{ agent_browser_user }}/.config/browseros-agent"
@@ -154,7 +156,7 @@ agent_browser_checks: >-
       {'name': 'Playwright MCP', 'port': agent_browser_playwright_mcp_port},
       {'name': 'x11vnc', 'port': 5900},
       {'name': 'noVNC', 'port': agent_browser_novnc_port}]
-     + ([{'name': 'BrowserOS MCP', 'port': agent_browser_browseros_mcp_port},
+     + ([{'name': 'BrowserOS MCP', 'port': agent_browser_browseros_server_port | default(agent_browser_browseros_mcp_port)},
          {'name': 'BrowserOS MCP forward', 'port': agent_browser_browseros_mcp_public_port}]
         if agent_browser_browseros_enabled | bool else [])
      + ([{'name': 'camofox-browser', 'port': agent_browser_camofox_port},
