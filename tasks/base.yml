@@ -11,6 +11,8 @@
       - jq
       - unzip
       - socat
+      - build-essential   # compiles better-sqlite3 for camofox-browser when no prebuilt binary fits
+      - python3
       - ufw
       - systemd-container   # machinectl, to reach the desktop user's services
     state: present

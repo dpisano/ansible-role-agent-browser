@@ -17,6 +17,23 @@
   register: agent_browser_camofox_npm
   notify: Restart the desktop session
 
+# ignore_scripts also skips better-sqlite3's install step, which provides the
+# compiled binding camofox-browser needs ("Could not locate the bindings file").
+- name: Look for better-sqlite3's compiled binding
+  ansible.builtin.find:
+    paths: /usr/local/lib/node_modules/camofox-browser/node_modules/better-sqlite3
+    patterns: better_sqlite3.node
+    recurse: true
+  register: agent_browser_sqlite_binding
+
+- name: Build better-sqlite3
+  ansible.builtin.command: npm rebuild better-sqlite3
+  args:
+    chdir: /usr/local/lib/node_modules/camofox-browser
+  changed_when: true
+  when: agent_browser_sqlite_binding.matched == 0
+  notify: Restart the desktop session
+
 - name: Read the installed Camoufox version
   ansible.builtin.slurp:
     src: "/home/{{ agent_browser_user }}/.cache/camoufox/version.json"
