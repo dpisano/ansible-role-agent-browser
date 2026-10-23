@@ -95,7 +95,7 @@ agent_browser_browseros_url: >-
   }}/BrowserOS_v{{ agent_browser_browseros_version }}_amd64.deb
 # BrowserOS's built-in MCP server listens on localhost at this port; socat
 # forwards agent_browser_browseros_mcp_public_port to it.
-agent_browser_browseros_mcp_port: 9239
+agent_browser_browseros_mcp_port: 9200
 agent_browser_browseros_mcp_public_port: 9240
 agent_browser_browseros_profile_dir: "/home/{{ agent_browser_user }}/.config/browseros-agent"
 
