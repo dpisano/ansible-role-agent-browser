@@ -9,3 +9,10 @@
   ansible.builtin.apt:
     deb: /var/cache/apt/archives/browseros_{{ agent_browser_browseros_version }}_amd64.deb
     state: present
+
+- name: Write the BrowserOS MCP forwarder
+  ansible.builtin.template:
+    src: browseros-mcp-forward.sh.j2
+    dest: /usr/local/bin/browseros-mcp-forward
+    mode: "0755"
+  notify: Restart the desktop session

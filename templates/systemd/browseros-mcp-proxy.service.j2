@@ -1,10 +1,10 @@
 # Managed by Ansible (agent-browser role).
 [Unit]
-Description=Forward port {{ agent_browser_browseros_mcp_public_port }} to BrowserOS's MCP server (localhost only)
+Description=Forward port {{ agent_browser_browseros_mcp_public_port }} to BrowserOS's MCP server, wherever it listens
 PartOf=agent-browser.target
 
 [Service]
-ExecStart=/usr/bin/socat TCP-LISTEN:{{ agent_browser_browseros_mcp_public_port }},fork,reuseaddr TCP:127.0.0.1:{{ agent_browser_browseros_mcp_port }}
+ExecStart=/usr/local/bin/browseros-mcp-forward
 Restart=always
 RestartSec=5
 

@@ -1,6 +1,30 @@
 ---
 # Checks that the session came up and every service answers, then reports what
 # WebGL renderer Brave gets.
+# BrowserOS records the port its MCP server got in config.json once it is up.
+- name: Wait for BrowserOS to write its config
+  ansible.builtin.wait_for:
+    path: "{{ agent_browser_browseros_profile_dir }}/.browseros/config.json"
+    search_regex: '"server"'
+    timeout: 180
+  when: agent_browser_browseros_enabled | bool
+  failed_when: false
+
+- name: Read the port of BrowserOS's MCP server
+  ansible.builtin.slurp:
+    src: "{{ agent_browser_browseros_profile_dir }}/.browseros/config.json"
+  register: agent_browser_browseros_config
+  when: agent_browser_browseros_enabled | bool
+  failed_when: false
+
+- name: Use that port for the check
+  ansible.builtin.set_fact:
+    agent_browser_browseros_server_port: "{{ (agent_browser_browseros_config.content | b64decode | from_json).ports.server }}"
+  when:
+    - agent_browser_browseros_enabled | bool
+    - agent_browser_browseros_config.content is defined
+  failed_when: false
+
 - name: Wait for each service to listen
   ansible.builtin.wait_for:
     host: 127.0.0.1

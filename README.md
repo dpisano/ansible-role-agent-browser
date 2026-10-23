@@ -50,7 +50,7 @@ The main ones; see [`defaults/main.yml`](defaults/main.yml) for all of them.
 | `agent_browser_ssh_allow_from` | `[10.0.0.0/8]` | Networks allowed to SSH in; must include the node |
 | `agent_browser_*_version` | pinned | Playwright MCP, chrome-devtools-mcp, camofox-browser, camofox-mcp, BrowserOS |
 
-Ports: noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to `9200` on localhost), camofox-mcp `9378`; Brave's CDP `9222` and camofox-browser `9377` stay on localhost.
+Ports: noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to wherever BrowserOS's server listens, usually `9200`), camofox-mcp `9378`; Brave's CDP `9222` and camofox-browser `9377` stay on localhost.
 
 ## Example playbook
 
