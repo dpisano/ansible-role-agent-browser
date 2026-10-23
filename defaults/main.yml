@@ -1,0 +1,162 @@
+---
+# Which phase to run. The playbook runs them as separate plays:
+#   build      on the Proxmox node: create (or start) the VM and add it to the
+#              in-memory group agent_browser_build
+#   provision  inside the VM, over SSH through the node: desktop, browsers, MCP
+#              servers, remote access, firewall
+agent_browser_phase: build
+
+# --- The VM ------------------------------------------------------------------
+agent_browser_vm_name: agent-browser
+agent_browser_vmid: 9130
+agent_browser_cores: 6
+agent_browser_memory: 16384   # MiB; three browsers share it
+agent_browser_disk: 80        # GiB
+agent_browser_storage: local-lvm
+agent_browser_bridge: vmbr0
+agent_browser_vlan: ""
+# Static address (CIDR, e.g. 10.1.3.50/24) and gateway. Left empty, the VM takes
+# DHCP: give it a reservation by MAC so noVNC and the MCP URLs stay put (the
+# Tailscale name stays put either way).
+agent_browser_ip: ""
+agent_browser_gateway: ""
+agent_browser_dns: ""
+
+# Proxmox PCI resource mapping of the GPU (an SR-IOV VF of the Arc B70) passed
+# to the VM. Browsers render WebGL on it instead of the software renderer
+# (llvmpipe), which bot checks flag. Empty: no GPU.
+agent_browser_gpu_mapping: ""
+
+# Destroy the VM at agent_browser_vmid first and build it again (the browser
+# profiles go with it).
+agent_browser_rebuild: false
+
+# Proxmox tag that marks the VM as built by this role; a VMID without it is
+# never touched.
+agent_browser_tag: agent-browser
+
+# Ubuntu 26.04 LTS: its kernel and Mesa have the xe driver's VF support.
+agent_browser_image_url: https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img
+agent_browser_image_file: ubuntu-2604-cloudimg-amd64.qcow2
+agent_browser_image_dir: /var/lib/vz/template/iso/cloud-init
+agent_browser_snippets_storage: local
+agent_browser_snippets_dir: /var/lib/vz/snippets
+# The image's default login, which Ansible connects as.
+agent_browser_image_user: ubuntu
+
+# Public key authorized for the image user; the controller must hold the
+# private half.
+agent_browser_ssh_public_key: "{{ users[0].ssh_key }}"
+
+# How long to wait for the guest agent to report an address.
+agent_browser_boot_retries: 60
+agent_browser_boot_delay: 5
+
+# --- The desktop -------------------------------------------------------------
+# The account the desktop logs in to automatically. The browsers, the MCP
+# servers and VNC run as this user.
+agent_browser_user: browser
+agent_browser_resolution: 1920x1080
+
+# Time zone of the VM, and so of the browsers. Set it to match where your
+# internet address is: a time zone that disagrees with the IP is a bot signal.
+agent_browser_timezone: ""
+agent_browser_locale: en_US.UTF-8
+
+# --- Remote access (noVNC) ---------------------------------------------------
+# x11vnc shares the live desktop on localhost; websockify serves noVNC on
+# agent_browser_novnc_port. The password is required.
+agent_browser_vnc_password: ""
+agent_browser_novnc_port: 6080
+
+# --- Brave -------------------------------------------------------------------
+# Brave's DevTools (CDP) port. It listens on localhost only; the MCP servers
+# on the VM reach it there.
+agent_browser_brave_cdp_port: 9222
+agent_browser_brave_profile_dir: "/home/{{ agent_browser_user }}/.config/brave-agent"
+# Extra Brave command-line switches.
+agent_browser_brave_extra_args: []
+
+# --- MCP servers (npm versions) ----------------------------------------------
+agent_browser_playwright_mcp_version: 0.0.83
+agent_browser_chrome_devtools_mcp_version: 1.11.0
+agent_browser_camofox_browser_version: 2.4.8
+agent_browser_camofox_mcp_version: 1.15.0
+
+# Playwright MCP, attached to Brave over CDP; served over HTTP on all
+# interfaces, which the firewall limits to Tailscale.
+agent_browser_playwright_mcp_port: 8931
+
+# --- BrowserOS ---------------------------------------------------------------
+agent_browser_browseros_enabled: true
+agent_browser_browseros_version: 0.51.0
+agent_browser_browseros_url: >-
+  https://github.com/browseros-ai/BrowserOS/releases/download/v{{ agent_browser_browseros_version
+  }}/BrowserOS_v{{ agent_browser_browseros_version }}_amd64.deb
+# BrowserOS's built-in MCP server listens on localhost at this port; socat
+# forwards agent_browser_browseros_mcp_public_port to it.
+agent_browser_browseros_mcp_port: 9239
+agent_browser_browseros_mcp_public_port: 9240
+agent_browser_browseros_profile_dir: "/home/{{ agent_browser_user }}/.config/browseros-agent"
+
+# --- Camoufox (through camofox-browser + camofox-mcp) ------------------------
+agent_browser_camoufox_enabled: true
+# camofox-browser's REST API (localhost only) and camofox-mcp's HTTP port.
+agent_browser_camofox_port: 9377
+agent_browser_camofox_mcp_port: 9378
+# Bearer token MCP clients send to camofox-mcp (32+ characters). Required when
+# Camoufox is enabled.
+agent_browser_camofox_mcp_api_key: ""
+# Fingerprint OS Camoufox presents (windows, macos or linux). linux matches the
+# VM's network stack and fonts.
+agent_browser_camoufox_os: linux
+
+# --- Firewall ----------------------------------------------------------------
+# Networks allowed to SSH in (besides Tailscale). The node the playbook jumps
+# through must be in one of them.
+agent_browser_ssh_allow_from:
+  - 10.0.0.0/8
+
+# --- Internal ----------------------------------------------------------------
+# First IPv4 address in `qm guest cmd ... network-get-interfaces` that is
+# neither loopback nor Tailscale (100.64.0.0/10).
+agent_browser_ipv4_regex: >-
+  "ip-address" *: *"(?!127\.|100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
+
+# Where the role keeps the user's generated config (VNC password, MCP key).
+agent_browser_config_dir: "/home/{{ agent_browser_user }}/.config/agent-browser"
+agent_browser_unit_dir: "/home/{{ agent_browser_user }}/.config/systemd/user"
+
+# The user services the role writes, by component.
+agent_browser_units_base:
+  - agent-browser.target
+  - brave.service
+  - playwright-mcp.service
+  - x11vnc.service
+  - novnc.service
+agent_browser_units_browseros:
+  - browseros.service
+  - browseros-mcp-proxy.service
+agent_browser_units_camoufox:
+  - camofox-browser.service
+  - camofox-mcp.service
+agent_browser_units_all_known: "{{ agent_browser_units_base + agent_browser_units_browseros + agent_browser_units_camoufox }}"
+agent_browser_units_all: >-
+  {{ agent_browser_units_base
+     + (agent_browser_units_browseros if agent_browser_browseros_enabled | bool else [])
+     + (agent_browser_units_camoufox if agent_browser_camoufox_enabled | bool else []) }}
+agent_browser_tailscale_ports: >-
+  {{ ['22', agent_browser_novnc_port | string, agent_browser_playwright_mcp_port | string]
+     + ([agent_browser_browseros_mcp_public_port | string] if agent_browser_browseros_enabled | bool else [])
+     + ([agent_browser_camofox_mcp_port | string] if agent_browser_camoufox_enabled | bool else []) }}
+agent_browser_checks: >-
+  {{ [{'name': 'Brave (CDP)', 'port': agent_browser_brave_cdp_port},
+      {'name': 'Playwright MCP', 'port': agent_browser_playwright_mcp_port},
+      {'name': 'x11vnc', 'port': 5900},
+      {'name': 'noVNC', 'port': agent_browser_novnc_port}]
+     + ([{'name': 'BrowserOS MCP', 'port': agent_browser_browseros_mcp_port},
+         {'name': 'BrowserOS MCP forward', 'port': agent_browser_browseros_mcp_public_port}]
+        if agent_browser_browseros_enabled | bool else [])
+     + ([{'name': 'camofox-browser', 'port': agent_browser_camofox_port},
+         {'name': 'camofox-mcp', 'port': agent_browser_camofox_mcp_port}]
+        if agent_browser_camoufox_enabled | bool else []) }}

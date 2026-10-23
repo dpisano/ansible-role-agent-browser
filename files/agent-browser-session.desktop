@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Agent browser session
+Comment=Starts the browsers, MCP servers and VNC for this desktop (agent-browser role)
+Exec=/usr/local/bin/agent-browser-session
+OnlyShowIn=XFCE;
+X-GNOME-Autostart-enabled=true

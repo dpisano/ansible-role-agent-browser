@@ -1,0 +1,76 @@
+---
+# XFCE on Xorg (not Wayland, so x11vnc and xdotool work), logged in
+# automatically to one persistent session: the screen the agent drives, noVNC
+# shows and the Proxmox console shows are the same.
+- name: Accept the Microsoft core fonts EULA
+  ansible.builtin.debconf:
+    name: ttf-mscorefonts-installer
+    question: msttcorefonts/accepted-mscorefonts-eula
+    vtype: select
+    value: "true"
+
+# Fonts: a browser's font list is part of its fingerprint, and a bare server
+# install has almost none. The sound stack (PipeWire) is there for the same
+# reason as the VM's sound card.
+- name: Install the desktop, display stack, sound, fonts and remote access
+  ansible.builtin.apt:
+    name:
+      - xfce4
+      - xfce4-terminal
+      - lightdm
+      - lightdm-gtk-greeter
+      - xserver-xorg
+      - xserver-xorg-video-all
+      - x11-xserver-utils
+      - dbus-x11
+      - xdotool
+      - mesa-utils
+      - libgl1-mesa-dri
+      - mesa-vulkan-drivers
+      - intel-media-va-driver
+      - pipewire
+      - pipewire-pulse
+      - wireplumber
+      - pavucontrol
+      - fonts-noto
+      - fonts-noto-color-emoji
+      - fonts-liberation
+      - fonts-dejavu
+      - ttf-mscorefonts-installer
+      - x11vnc
+      - novnc
+      - websockify
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+# Anything that blanks or locks the screen would hide it from noVNC and the agent.
+- name: Remove screen lockers
+  ansible.builtin.apt:
+    name: [light-locker, xfce4-screensaver, xscreensaver]
+    state: absent
+
+- name: Log the desktop user in automatically
+  ansible.builtin.template:
+    src: lightdm-autologin.conf.j2
+    dest: /etc/lightdm/lightdm.conf.d/50-agent-browser.conf
+    mode: "0644"
+  notify: Restart the desktop session
+
+- name: Make LightDM the display manager
+  ansible.builtin.copy:
+    content: "/usr/sbin/lightdm\n"
+    dest: /etc/X11/default-display-manager
+    mode: "0644"
+
+- name: Boot to the graphical target
+  ansible.builtin.file:
+    src: /usr/lib/systemd/system/graphical.target
+    dest: /etc/systemd/system/default.target
+    state: link
+
+- name: Enable LightDM
+  ansible.builtin.systemd:
+    name: lightdm
+    enabled: true
+    state: started

@@ -1,0 +1,13 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=noVNC on port {{ agent_browser_novnc_port }}
+PartOf=agent-browser.target
+After=x11vnc.service
+
+[Service]
+ExecStart=/usr/bin/websockify --web /usr/share/novnc 0.0.0.0:{{ agent_browser_novnc_port }} 127.0.0.1:5900
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

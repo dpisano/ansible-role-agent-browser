@@ -1,0 +1,5 @@
+---
+# The VM is created on the Proxmox node (build), then set up over SSH through
+# the node (provision). See agent-browser.yml in homelab-ansible.
+- name: Pick the phase
+  ansible.builtin.include_tasks: "{{ agent_browser_phase }}.yml"

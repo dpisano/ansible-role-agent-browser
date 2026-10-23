@@ -1,0 +1,55 @@
+---
+# Everything that needs the desktop runs as systemd user services of the desktop
+# user, pulled in by agent-browser.target. The XFCE autostart entry runs
+# agent-browser-session, which hands the session's DISPLAY to systemd, starts
+# the target, and stops it when the X session ends. Services restart on their
+# own if they crash or a browser window is closed.
+- name: Write the session script
+  ansible.builtin.template:
+    src: agent-browser-session.sh.j2
+    dest: /usr/local/bin/agent-browser-session
+    mode: "0755"
+  notify: Restart the desktop session
+
+- name: Start the session script with the desktop
+  ansible.builtin.copy:
+    src: agent-browser-session.desktop
+    dest: "/home/{{ agent_browser_user }}/.config/autostart/agent-browser-session.desktop"
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0644"
+  notify: Restart the desktop session
+
+# x11vnc reads the password from this file (plain text, first line).
+- name: Write the VNC password
+  ansible.builtin.copy:
+    content: "{{ agent_browser_vnc_password }}\n"
+    dest: "{{ agent_browser_config_dir }}/vnc.passwd"
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart the desktop session
+
+- name: Write the user services
+  ansible.builtin.template:
+    src: "systemd/{{ item }}.j2"
+    dest: "{{ agent_browser_unit_dir }}/{{ item }}"
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0644"
+  loop: "{{ agent_browser_units_all }}"
+  notify: Restart the desktop session
+
+# A browser that is switched off keeps no unit behind to start.
+- name: Remove the services of browsers that are switched off
+  ansible.builtin.file:
+    path: "{{ agent_browser_unit_dir }}/{{ item }}"
+    state: absent
+  loop: "{{ agent_browser_units_all_known | difference(agent_browser_units_all) }}"
+  notify: Restart the desktop session
+
+- name: Make sure the desktop session is up
+  ansible.builtin.systemd:
+    name: lightdm
+    state: started

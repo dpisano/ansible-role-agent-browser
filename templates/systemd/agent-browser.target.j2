@@ -1,0 +1,5 @@
+# Managed by Ansible (agent-browser role). Started by agent-browser-session
+# when the desktop logs in.
+[Unit]
+Description=Agent browser desktop services
+Wants={{ agent_browser_units_all | reject('eq', 'agent-browser.target') | join(' ') }}

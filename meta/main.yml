@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: agent_browser
+  namespace: dpisano
+  author: David Pisano
+  description: >-
+    Build a Proxmox VM with a full desktop running Brave, BrowserOS and Camoufox
+    for AI agents to drive over MCP, and noVNC for a person to take over
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+  galaxy_tags:
+    - proxmox
+    - browser
+    - mcp
+    - agent
+
+dependencies: []

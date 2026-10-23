@@ -1,0 +1,87 @@
+---
+- name: Enable snippets on the snippets storage
+  block:
+    - name: Check the storage for snippets
+      ansible.builtin.command: pvesm status --storage {{ agent_browser_snippets_storage }} --content snippets
+      register: agent_browser_snippets_check
+      changed_when: false
+      failed_when: false
+
+    - name: Add the snippets content type
+      ansible.builtin.shell: |
+        set -o pipefail
+        pvesm set {{ agent_browser_snippets_storage }} --content "$(pvesm config {{ agent_browser_snippets_storage }} | awk '/^content/{print $2}'),snippets"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: agent_browser_snippets_check.stdout_lines | length < 2
+
+- name: Create the image and snippet directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ agent_browser_image_dir }}"
+    - "{{ agent_browser_snippets_dir }}"
+
+- name: Download the Ubuntu cloud image
+  ansible.builtin.get_url:
+    url: "{{ agent_browser_image_url }}"
+    dest: "{{ agent_browser_image_dir }}/{{ agent_browser_image_file }}"
+    mode: "0644"
+
+- name: Write the cloud-init user-data
+  ansible.builtin.template:
+    src: user-data.yml.j2
+    dest: "{{ agent_browser_snippets_dir }}/agent-browser-{{ agent_browser_vmid }}.yml"
+    mode: "0644"
+
+# q35 for the PCIe GPU. Ballooning is off: a VM with a passed-through device
+# needs all its memory pinned anyway. The virtio display is what the desktop
+# draws on (the VF has no outputs); the sound card is there because a browser
+# without one has an audio fingerprint no real desktop has.
+- name: Create the VM
+  ansible.builtin.command: >-
+    qm create {{ agent_browser_vmid }}
+    --name {{ agent_browser_vm_name }}
+    --ostype l26
+    --machine q35
+    --cpu host
+    --cores {{ agent_browser_cores }}
+    --memory {{ agent_browser_memory }}
+    --balloon 0
+    --scsihw virtio-scsi-single
+    --net0 virtio,bridge={{ agent_browser_bridge }}{{ ',tag=' ~ agent_browser_vlan if agent_browser_vlan | string else '' }}
+    --agent enabled=1
+    --vga virtio
+    --serial0 socket
+    --audio0 device=ich9-intel-hda,driver=none
+    --ipconfig0 {{ ('ip=' ~ agent_browser_ip ~ (',gw=' ~ agent_browser_gateway if agent_browser_gateway | string else ''))
+                   if agent_browser_ip | string else 'ip=dhcp' }}
+    {{ '--nameserver ' ~ agent_browser_dns if agent_browser_dns | string else '' }}
+    {{ '--hostpci0 mapping=' ~ agent_browser_gpu_mapping ~ ',pcie=1' if agent_browser_gpu_mapping | string else '' }}
+    --tags {{ agent_browser_tag }}
+  changed_when: true
+
+- name: Import the cloud image as the boot disk
+  ansible.builtin.command: >-
+    qm set {{ agent_browser_vmid }}
+    --scsi0 {{ agent_browser_storage }}:0,import-from={{ agent_browser_image_dir }}/{{ agent_browser_image_file }},discard=on,ssd=1,iothread=1
+    --boot order=scsi0
+  changed_when: true
+
+- name: Grow the disk
+  ansible.builtin.command: qm resize {{ agent_browser_vmid }} scsi0 {{ agent_browser_disk }}G
+  changed_when: true
+
+- name: Attach the cloud-init drive and user-data
+  ansible.builtin.command: >-
+    qm set {{ agent_browser_vmid }}
+    --ide2 {{ agent_browser_storage }}:cloudinit
+    --cicustom user={{ agent_browser_snippets_storage }}:snippets/agent-browser-{{ agent_browser_vmid }}.yml
+  changed_when: true
+
+- name: Start the VM
+  ansible.builtin.command: qm start {{ agent_browser_vmid }}
+  changed_when: true

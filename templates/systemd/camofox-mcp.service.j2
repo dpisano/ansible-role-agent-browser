@@ -1,0 +1,22 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=camofox-mcp: MCP server for Camoufox (HTTP on port {{ agent_browser_camofox_mcp_port }})
+PartOf=agent-browser.target
+After=camofox-browser.service
+
+[Service]
+Environment=CAMOFOX_URL=http://127.0.0.1:{{ agent_browser_camofox_port }}
+Environment=CAMOFOX_HTTP_HOST=0.0.0.0
+Environment=CAMOFOX_HTTP_PORT={{ agent_browser_camofox_mcp_port }}
+# Requests per minute; the default (60) is easy for an agent to hit.
+Environment=CAMOFOX_HTTP_RATE_LIMIT=600
+# CAMOFOX_HTTP_API_KEY: clients send it as a bearer token.
+EnvironmentFile={{ agent_browser_config_dir }}/camofox-mcp.env
+# Not the camofox-mcp-http link: http.js only starts when argv[1] is its own
+# path, so through the symlink it exits silently.
+ExecStart=/usr/bin/node /usr/local/lib/node_modules/camofox-mcp/dist/http.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

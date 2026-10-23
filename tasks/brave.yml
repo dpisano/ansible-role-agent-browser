@@ -1,0 +1,35 @@
+---
+# Brave's own apt repository, set up as https://brave.com/linux/ does it.
+- name: Add Brave's signing key
+  ansible.builtin.get_url:
+    url: https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+    dest: /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    mode: "0644"
+
+- name: Add Brave's apt repository
+  ansible.builtin.get_url:
+    url: https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+    dest: /etc/apt/sources.list.d/brave-browser-release.sources
+    mode: "0644"
+  register: agent_browser_brave_repo
+
+- name: Install Brave
+  ansible.builtin.apt:
+    name: brave-browser
+    state: present
+    update_cache: "{{ agent_browser_brave_repo is changed }}"
+
+# Only switches off Brave's own products (Rewards, Wallet, VPN, Leo) so they
+# don't prompt; nothing here changes what a website sees, and Shields keep
+# their defaults.
+- name: Create Brave's managed policy directory
+  ansible.builtin.file:
+    path: /etc/brave/policies/managed
+    state: directory
+    mode: "0755"
+
+- name: Write Brave's policies
+  ansible.builtin.copy:
+    src: brave-policies.json
+    dest: /etc/brave/policies/managed/agent-browser.json
+    mode: "0644"

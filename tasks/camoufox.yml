@@ -1,0 +1,44 @@
+---
+# camofox-browser runs Camoufox (headed, on the desktop) behind a REST API on
+# localhost; camofox-mcp turns that into an MCP server. Its install script
+# would fetch the Camoufox binary into root's cache, so scripts are skipped and
+# the binary is fetched for the desktop user instead.
+- name: Install camofox-browser and camofox-mcp
+  community.general.npm:
+    name: "{{ item.name }}"
+    version: "{{ item.version }}"
+    global: true
+    ignore_scripts: true
+  loop:
+    - { name: camofox-browser, version: "{{ agent_browser_camofox_browser_version }}" }
+    - { name: camofox-mcp, version: "{{ agent_browser_camofox_mcp_version }}" }
+  loop_control:
+    label: "{{ item.name }}@{{ item.version }}"
+  register: agent_browser_camofox_npm
+  notify: Restart the desktop session
+
+- name: Read the installed Camoufox version
+  ansible.builtin.slurp:
+    src: "/home/{{ agent_browser_user }}/.cache/camoufox/version.json"
+  register: agent_browser_camoufox_installed
+  failed_when: false
+
+# camoufox-js (the version camofox-browser depends on) picks the Camoufox
+# release; fetch again after a camofox-browser upgrade.
+- name: Fetch the Camoufox browser for the desktop user
+  ansible.builtin.command: >-
+    node /usr/local/lib/node_modules/camofox-browser/node_modules/camoufox-js/dist/__main__.js fetch
+  become: true
+  become_user: "{{ agent_browser_user }}"
+  changed_when: true
+  when: agent_browser_camoufox_installed.content is not defined or agent_browser_camofox_npm.results[0] is changed
+
+- name: Write camofox-mcp's API key
+  ansible.builtin.template:
+    src: camofox-mcp.env.j2
+    dest: "{{ agent_browser_config_dir }}/camofox-mcp.env"
+    owner: "{{ agent_browser_user }}"
+    group: "{{ agent_browser_user }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart the desktop session

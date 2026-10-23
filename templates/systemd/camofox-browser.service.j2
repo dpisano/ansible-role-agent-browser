@@ -1,0 +1,25 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=camofox-browser: Camoufox, headed on the desktop, behind a REST API on localhost:{{ agent_browser_camofox_port }}
+PartOf=agent-browser.target
+
+[Service]
+{% if agent_browser_gpu_mapping | length > 0 %}
+Environment=DRI_PRIME=1
+{% endif %}
+Environment=CAMOFOX_HOST=127.0.0.1
+Environment=CAMOFOX_PORT={{ agent_browser_camofox_port }}
+Environment=CAMOFOX_HEADLESS=false
+Environment=CAMOFOX_OS={{ agent_browser_camoufox_os }}
+Environment=CAMOFOX_SCREEN_WIDTH={{ agent_browser_resolution.split('x')[0] }}
+Environment=CAMOFOX_SCREEN_HEIGHT={{ agent_browser_resolution.split('x')[1] }}
+# It closes idle browsers after 30 minutes and exits; keep it up for a day at a
+# time (systemd starts it again either way).
+Environment=CAMOFOX_IDLE_TIMEOUT_MS=86400000
+Environment=CAMOFOX_IDLE_EXIT_TIMEOUT_MS=86400000
+ExecStart=/usr/local/bin/camofox-browser
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target
