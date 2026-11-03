@@ -1,0 +1,62 @@
+---
+# Browserless and Steel run as containers from one compose project, started at
+# boot by a system unit. Docker itself comes from another role.
+- name: Check that Docker and the compose plugin are installed
+  ansible.builtin.command: docker compose version
+  register: agent_browser_docker_compose
+  changed_when: false
+  failed_when: false
+
+- name: Fail if Docker is missing
+  ansible.builtin.assert:
+    that: agent_browser_docker_compose.rc == 0
+    fail_msg: >-
+      Browserless and Steel run as containers, and `docker compose` does not work on the VM.
+      This role does not install Docker: run a Docker role before it (Docker Engine with the
+      compose plugin, running), or set agent_browser_browserless_enabled and
+      agent_browser_steel_enabled to false.
+    quiet: true
+
+- name: Create the compose directory
+  ansible.builtin.file:
+    path: "{{ agent_browser_docker_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Write the compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ agent_browser_docker_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the containers
+
+# The Browserless token; compose reads it from .env next to the compose file.
+- name: Write the compose environment
+  ansible.builtin.template:
+    src: containers.env.j2
+    dest: "{{ agent_browser_docker_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart the containers
+
+- name: Write the containers service
+  ansible.builtin.template:
+    src: system/agent-browser-containers.service.j2
+    dest: /etc/systemd/system/agent-browser-containers.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the containers
+
+- name: Enable and start the containers
+  ansible.builtin.systemd:
+    name: agent-browser-containers.service
+    daemon_reload: true
+    enabled: true
+    state: started

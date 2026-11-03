@@ -9,6 +9,8 @@ What ends up on the VM:
 | **Brave** | Stock Brave from Brave's apt repository, own profile, DevTools (CDP) on localhost | **Playwright MCP** over HTTP (attached to the running Brave over CDP); **chrome-devtools-mcp** started over SSH |
 | **BrowserOS** | Chromium fork with an MCP server built in | Its MCP server (localhost), forwarded by socat |
 | **Camoufox** | Firefox fork that fakes its fingerprint in C++, run by [camofox-browser](https://github.com/redf0x1/camofox-browser) | [camofox-mcp](https://github.com/redf0x1/camofox-mcp) over HTTP, bearer token |
+| **Browserless** | Headless Chromium in a Docker container on the VM (localhost only), token protected | [@browserless.io/mcp](https://www.npmjs.com/package/@browserless.io/mcp) over HTTP, the Browserless token as bearer. Only the tools that use endpoints the open-source image has work (e.g. `browserless_function`); smart scraper, export, agent, search, crawl and map are Browserless Cloud APIs |
+| **Steel** | [steel-browser](https://github.com/steel-dev/steel-browser) API in a Docker container on the VM (localhost only); no authentication, one session at a time | [steel-mcp](https://github.com/steel-dev/steel-mcp-server) (stdio only) served over HTTP by supergateway |
 | **noVNC** | x11vnc on the live desktop, behind websockify | You, in a web browser |
 
 All of them run on one XFCE desktop (Xorg, logged in automatically), so the agent, noVNC and the Proxmox console see the same screen. Only Tailscale reaches the MCP servers and noVNC (ufw); SSH is also open to the LAN.
@@ -18,6 +20,7 @@ All of them run on one XFCE desktop (Xorg, logged in automatically), so the agen
 - Proxmox VE, with `qm` on the node the build play runs on, and a storage that allows snippets (the role turns it on).
 - The `community.general` collection (`timezone`, `locale_gen`, `npm`, `ufw`).
 - Optional, a GPU for the VM as a Proxmox **PCI resource mapping** (Datacenter > Resource Mappings), e.g. an SR-IOV virtual function of an Intel Arc Pro B70. Without one, WebGL reports a software renderer (llvmpipe), which bot checks flag.
+- Docker Engine with the compose plugin on the VM, when Browserless or Steel is enabled. The role does not install it: run a Docker role first (it checks and stops with a message if `docker compose` is missing).
 - Tailscale on the VM, e.g. with `artis3n.tailscale.machine` in the provision play (see the example). The role only opens the firewall on `tailscale0`.
 
 ## How it runs
@@ -45,12 +48,15 @@ The main ones; see [`defaults/main.yml`](defaults/main.yml) for all of them.
 | `agent_browser_vnc_password` | `""` | **Required.** noVNC password (VNC uses only the first 8 characters) |
 | `agent_browser_camofox_mcp_api_key` | `""` | **Required with Camoufox**, 32+ characters |
 | `agent_browser_browseros_enabled` / `agent_browser_camoufox_enabled` | `true` / `true` | |
+| `agent_browser_browserless_enabled` / `agent_browser_steel_enabled` | `true` / `true` | Docker containers plus an MCP server each |
+| `agent_browser_browserless_token` | `""` | **Required with Browserless**, 16+ characters. The container's token and the bearer token for browserless-mcp |
+| `agent_browser_steel_ui_enabled` | `false` | Steel's web UI on localhost |
 | `agent_browser_rebuild` | `false` | Destroy the VM (and its browser profiles) and build it again |
 | `agent_browser_user` | `browser` | The desktop login; everything runs as this user |
 | `agent_browser_ssh_allow_from` | `[10.0.0.0/8]` | Networks allowed to SSH in; must include the node |
 | `agent_browser_*_version` | pinned | Playwright MCP, chrome-devtools-mcp, camofox-browser, camofox-mcp, BrowserOS |
 
-Ports: noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to wherever BrowserOS's server listens, usually `9200`), camofox-mcp `9378`; Brave's CDP `9222` and camofox-browser `9377` stay on localhost.
+Ports: Browserless MCP `9390`, Steel MCP `9391` (the containers sit on localhost: Browserless `3030`, Steel `3031`, Steel CDP `9223`), noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to wherever BrowserOS's server listens, usually `9200`), camofox-mcp `9378`; Brave's CDP `9222` and camofox-browser `9377` stay on localhost.
 
 ## Example playbook
 
@@ -79,7 +85,7 @@ Ports: noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to w
   roles:
     - role: infisical-secrets
       vars:
-        infisical_secrets: [AGENT_BROWSER_VNC_PASSWORD, AGENT_BROWSER_CAMOFOX_MCP_API_KEY]
+        infisical_secrets: [AGENT_BROWSER_VNC_PASSWORD, AGENT_BROWSER_CAMOFOX_MCP_API_KEY, AGENT_BROWSER_BROWSERLESS_TOKEN]
     - role: artis3n.tailscale.machine
       vars:
         tailscale_up_skip: true
@@ -90,6 +96,7 @@ Ports: noVNC `6080`, Playwright MCP `8931`, BrowserOS MCP `9240` (forwarded to w
         agent_browser_gpu_mapping: arc-b70-vf1
         agent_browser_vnc_password: "{{ infisical_secret_values.AGENT_BROWSER_VNC_PASSWORD }}"
         agent_browser_camofox_mcp_api_key: "{{ infisical_secret_values.AGENT_BROWSER_CAMOFOX_MCP_API_KEY }}"
+        agent_browser_browserless_token: "{{ infisical_secret_values.AGENT_BROWSER_BROWSERLESS_TOKEN }}"
 ```
 
 ## Connecting
@@ -105,13 +112,17 @@ claude mcp add brave-devtools -- ssh browser@<vm> chrome-devtools-mcp --browser-
 claude mcp add --transport http browseros http://<vm>:9240/mcp
 # Camoufox
 claude mcp add --transport http camoufox http://<vm>:9378/mcp --header "Authorization: Bearer <key>"
+# Browserless (the Browserless token is the bearer token)
+claude mcp add --transport http browserless http://<vm>:9390/mcp --header "Authorization: Bearer <token>"
+# Steel
+claude mcp add --transport http steel http://<vm>:9391/mcp
 ```
 
 noVNC: `http://<vm>:6080/vnc.html`. Camoufox's window appears on the desktop when an agent opens its first tab.
 
 ## Security
 
-The MCP servers (camofox-mcp aside) and CDP have no authentication: whoever reaches them controls the browsers and every site they are signed in to. Keep the firewall as it is, keep sensitive accounts (email, banking) out of these profiles, and remember that pages the agent reads can carry instructions aimed at it.
+The MCP servers (camofox-mcp and browserless-mcp aside), Steel and CDP have no authentication: whoever reaches them controls the browsers and every site they are signed in to. Keep the firewall as it is, keep sensitive accounts (email, banking) out of these profiles, and remember that pages the agent reads can carry instructions aimed at it.
 
 ## Bot detection
 

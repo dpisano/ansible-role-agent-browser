@@ -1,0 +1,70 @@
+# Managed by Ansible (agent-browser role). Started by agent-browser-containers.service.
+# Every port is published on localhost only; the MCP servers on the VM are the way in.
+name: agent-browser
+services:
+{% if agent_browser_browserless_enabled | bool %}
+  browserless:
+    image: {{ agent_browser_browserless_image }}:{{ agent_browser_browserless_image_tag }}
+    restart: unless-stopped
+    shm_size: 2gb
+    ports:
+      - 127.0.0.1:{{ agent_browser_browserless_port }}:3000
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN}
+      CONCURRENT: "{{ agent_browser_browserless_concurrent }}"
+      QUEUED: "{{ agent_browser_browserless_queued }}"
+      TIMEOUT: "{{ agent_browser_browserless_timeout_ms }}"
+      HEALTH: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ agent_browser_browserless_cpus }}"
+          memory: {{ agent_browser_browserless_memory }}
+    healthcheck:
+      test: curl --fail "http://localhost:3000/pressure?token=${BROWSERLESS_TOKEN}" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+{% endif %}
+{% if agent_browser_steel_enabled | bool %}
+  steel-api:
+    image: {{ agent_browser_steel_api_image }}
+    restart: unless-stopped
+    shm_size: 2gb
+    ports:
+      - 127.0.0.1:{{ agent_browser_steel_port }}:3000
+      - 127.0.0.1:{{ agent_browser_steel_cdp_port }}:9223
+    environment:
+      # The host:port that session URLs in API answers point at.
+      DOMAIN: 127.0.0.1:{{ agent_browser_steel_port }}
+      CDP_DOMAIN: 127.0.0.1:{{ agent_browser_steel_cdp_port }}
+    volumes:
+      - steel-cache:/app/.cache
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ agent_browser_steel_cpus }}"
+          memory: {{ agent_browser_steel_memory }}
+    healthcheck:
+      test: curl --fail http://localhost:3000/v1/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+{% if agent_browser_steel_ui_enabled | bool %}
+  steel-ui:
+    image: {{ agent_browser_steel_ui_image }}
+    restart: unless-stopped
+    depends_on:
+      steel-api:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:{{ agent_browser_steel_ui_port }}:80
+    environment:
+      API_URL: http://steel-api:3000
+{% endif %}
+
+volumes:
+  steel-cache:
+{% endif %}

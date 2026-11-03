@@ -12,9 +12,12 @@
     that:
       - agent_browser_vnc_password | length > 0
       - not agent_browser_camoufox_enabled | bool or agent_browser_camofox_mcp_api_key | length >= 32
+      - not agent_browser_browserless_enabled | bool or agent_browser_browserless_token | length >= 16
     fail_msg: >-
       Set agent_browser_vnc_password (the noVNC password) and, with Camoufox enabled,
       agent_browser_camofox_mcp_api_key (32+ characters, the bearer token MCP clients send to camofox-mcp).
+      With Browserless enabled, set agent_browser_browserless_token (16+ characters, e.g. `openssl rand -hex 32`;
+      the container requires it and MCP clients send it as a bearer token to browserless-mcp).
     quiet: true
 
 - name: Wait for cloud-init to finish
@@ -27,6 +30,10 @@
 
 - name: Desktop
   ansible.builtin.include_tasks: desktop.yml
+
+- name: Browserless and Steel containers
+  ansible.builtin.include_tasks: containers.yml
+  when: agent_browser_browserless_enabled | bool or agent_browser_steel_enabled | bool
 
 - name: Node.js and the MCP servers
   ansible.builtin.include_tasks: mcp.yml

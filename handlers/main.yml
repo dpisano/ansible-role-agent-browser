@@ -6,3 +6,10 @@
   ansible.builtin.systemd:
     name: lightdm
     state: restarted
+
+# docker compose down, then up with the new compose file or token.
+- name: Restart the containers
+  ansible.builtin.systemd:
+    name: agent-browser-containers.service
+    state: restarted
+    daemon_reload: true

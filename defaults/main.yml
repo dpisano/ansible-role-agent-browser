@@ -113,6 +113,52 @@ agent_browser_camofox_mcp_api_key: ""
 # VM's network stack and fonts.
 agent_browser_camoufox_os: linux
 
+# --- Browserless and Steel (Docker containers + MCP servers) ------------------
+# Both run as containers on the VM (compose project in
+# agent_browser_docker_dir, started by agent-browser-containers.service) and
+# listen on localhost only. Each has an MCP server on the VM that Claude Code
+# reaches over Tailscale.
+#
+# Browserless: a headless Chromium behind the Browserless API, token protected.
+agent_browser_browserless_enabled: true
+# The token the container requires. MCP clients send the same value as a bearer
+# token to browserless-mcp. Required when Browserless is enabled.
+agent_browser_browserless_token: ""
+agent_browser_browserless_image: ghcr.io/browserless/chromium
+agent_browser_browserless_image_tag: v2.58.3
+agent_browser_browserless_port: 3030          # localhost; the container's own 3000
+agent_browser_browserless_mcp_port: 9390      # browserless-mcp, over Tailscale
+agent_browser_browserless_concurrent: 10
+agent_browser_browserless_queued: 20
+agent_browser_browserless_timeout_ms: 60000   # per session
+agent_browser_browserless_cpus: "2"
+agent_browser_browserless_memory: 4G
+
+# Steel: a browser API with sessions and a CDP endpoint. Self-hosted Steel has
+# no authentication and runs one session at a time. Steel only publishes
+# `latest`; the digests pin it. Bump them on purpose.
+agent_browser_steel_enabled: true
+agent_browser_steel_api_image: >-
+  ghcr.io/steel-dev/steel-browser-api@sha256:ab3c90266c83c0b48b2317e01c2187dd24aa015e8332ff708781584b00ee7516
+agent_browser_steel_ui_image: >-
+  ghcr.io/steel-dev/steel-browser-ui@sha256:bb1993459ebfbce2d26e43e4bb4d488e6bb2fa8b6dbc6d067f971b3990eb281e
+agent_browser_steel_port: 3031                # localhost; the container's own 3000
+agent_browser_steel_cdp_port: 9223            # localhost
+agent_browser_steel_mcp_port: 9391            # steel-mcp, over Tailscale
+agent_browser_steel_cpus: "2"
+agent_browser_steel_memory: 4G
+# Steel's web UI (session viewer), on localhost only: open it in the desktop
+# (noVNC) at http://127.0.0.1:agent_browser_steel_ui_port.
+agent_browser_steel_ui_enabled: false
+agent_browser_steel_ui_port: 5173
+
+agent_browser_docker_dir: /opt/agent-browser
+agent_browser_browserless_mcp_version: 1.44.0
+# steel-mcp is not on npm: it is installed from this tag of its GitHub repo.
+agent_browser_steel_mcp_version: 2.0.1
+# Wraps steel-mcp (stdio only) as streamable HTTP.
+agent_browser_supergateway_version: 4.2.1
+
 # --- Firewall ----------------------------------------------------------------
 # Networks allowed to SSH in (besides Tailscale). The node the playbook jumps
 # through must be in one of them.
@@ -142,15 +188,25 @@ agent_browser_units_browseros:
 agent_browser_units_camoufox:
   - camofox-browser.service
   - camofox-mcp.service
-agent_browser_units_all_known: "{{ agent_browser_units_base + agent_browser_units_browseros + agent_browser_units_camoufox }}"
+agent_browser_units_browserless:
+  - browserless-mcp.service
+agent_browser_units_steel:
+  - steel-mcp.service
+agent_browser_units_all_known: >-
+  {{ agent_browser_units_base + agent_browser_units_browseros + agent_browser_units_camoufox
+     + agent_browser_units_browserless + agent_browser_units_steel }}
 agent_browser_units_all: >-
   {{ agent_browser_units_base
      + (agent_browser_units_browseros if agent_browser_browseros_enabled | bool else [])
-     + (agent_browser_units_camoufox if agent_browser_camoufox_enabled | bool else []) }}
+     + (agent_browser_units_camoufox if agent_browser_camoufox_enabled | bool else [])
+     + (agent_browser_units_browserless if agent_browser_browserless_enabled | bool else [])
+     + (agent_browser_units_steel if agent_browser_steel_enabled | bool else []) }}
 agent_browser_tailscale_ports: >-
   {{ ['22', agent_browser_novnc_port | string, agent_browser_playwright_mcp_port | string]
      + ([agent_browser_browseros_mcp_public_port | string] if agent_browser_browseros_enabled | bool else [])
-     + ([agent_browser_camofox_mcp_port | string] if agent_browser_camoufox_enabled | bool else []) }}
+     + ([agent_browser_camofox_mcp_port | string] if agent_browser_camoufox_enabled | bool else [])
+     + ([agent_browser_browserless_mcp_port | string] if agent_browser_browserless_enabled | bool else [])
+     + ([agent_browser_steel_mcp_port | string] if agent_browser_steel_enabled | bool else []) }}
 agent_browser_checks: >-
   {{ [{'name': 'Brave (CDP)', 'port': agent_browser_brave_cdp_port},
       {'name': 'Playwright MCP', 'port': agent_browser_playwright_mcp_port},
@@ -161,4 +217,10 @@ agent_browser_checks: >-
         if agent_browser_browseros_enabled | bool else [])
      + ([{'name': 'camofox-browser', 'port': agent_browser_camofox_port},
          {'name': 'camofox-mcp', 'port': agent_browser_camofox_mcp_port}]
-        if agent_browser_camoufox_enabled | bool else []) }}
+        if agent_browser_camoufox_enabled | bool else [])
+     + ([{'name': 'Browserless', 'port': agent_browser_browserless_port},
+         {'name': 'browserless-mcp', 'port': agent_browser_browserless_mcp_port}]
+        if agent_browser_browserless_enabled | bool else [])
+     + ([{'name': 'Steel', 'port': agent_browser_steel_port},
+         {'name': 'steel-mcp', 'port': agent_browser_steel_mcp_port}]
+        if agent_browser_steel_enabled | bool else []) }}
