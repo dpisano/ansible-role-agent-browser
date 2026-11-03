@@ -18,3 +18,60 @@
   loop_control:
     label: "{{ item.name }}@{{ item.version }}"
   notify: Restart the desktop session
+
+# Browserless MCP talks to the Browserless container; Steel's MCP server is
+# stdio only, so supergateway serves it over HTTP.
+- name: Install the Browserless MCP server
+  community.general.npm:
+    name: "@browserless.io/mcp"
+    version: "{{ agent_browser_browserless_mcp_version }}"
+    global: true
+  when: agent_browser_browserless_enabled | bool
+  notify: Restart the desktop session
+
+- name: Install supergateway
+  community.general.npm:
+    name: supergateway
+    version: "{{ agent_browser_supergateway_version }}"
+    global: true
+  when: agent_browser_steel_enabled | bool
+  notify: Restart the desktop session
+
+# steel-mcp is not on npm, and installing it straight from GitHub with npm does
+# not build it. Clone the tag, install its dependencies and compile it.
+- name: Install git
+  ansible.builtin.apt:
+    name: git
+    state: present
+  when: agent_browser_steel_enabled | bool
+
+- name: Fetch steel-mcp
+  ansible.builtin.git:
+    repo: https://github.com/steel-dev/steel-mcp-server.git
+    dest: /opt/steel-mcp
+    version: "v{{ agent_browser_steel_mcp_version }}"
+  register: agent_browser_steel_mcp_src
+  when: agent_browser_steel_enabled | bool
+
+- name: Look for the compiled steel-mcp
+  ansible.builtin.stat:
+    path: /opt/steel-mcp/dist/stdio.js
+  register: agent_browser_steel_mcp_dist
+  when: agent_browser_steel_enabled | bool
+
+- name: Build steel-mcp
+  ansible.builtin.shell: npm ci --ignore-scripts && npm run build
+  args:
+    chdir: /opt/steel-mcp
+  changed_when: true
+  when:
+    - agent_browser_steel_enabled | bool
+    - agent_browser_steel_mcp_src is changed or not agent_browser_steel_mcp_dist.stat.exists
+  notify: Restart the desktop session
+
+- name: Link steel-mcp into the path
+  ansible.builtin.file:
+    src: /opt/steel-mcp/dist/stdio.js
+    dest: /usr/local/bin/steel-mcp
+    state: link
+  when: agent_browser_steel_enabled | bool

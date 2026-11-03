@@ -1,0 +1,23 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=Steel MCP, pointed at the local Steel container (HTTP on port {{ agent_browser_steel_mcp_port }})
+PartOf=agent-browser.target
+
+[Service]
+# steel-mcp only speaks stdio; supergateway serves it as streamable HTTP. It must
+# be stateful: steel-mcp keeps its browser sessions in memory, so every request
+# of a client has to reach the same process. Listens on every interface; the
+# firewall only lets Tailscale in. Self-hosted Steel has no authentication.
+Environment=STEEL_LOCAL=true
+Environment=STEEL_BASE_URL=http://127.0.0.1:{{ agent_browser_steel_port }}
+ExecStart=/usr/local/bin/supergateway \
+  --stdio /usr/local/bin/steel-mcp \
+  --outputTransport streamableHttp \
+  --streamableHttpPath /mcp \
+  --stateful \
+  --port {{ agent_browser_steel_mcp_port }}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

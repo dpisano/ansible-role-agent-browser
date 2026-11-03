@@ -1,0 +1,20 @@
+# Managed by Ansible (agent-browser role).
+[Unit]
+Description=Browserless MCP, pointed at the local Browserless container (HTTP on port {{ agent_browser_browserless_mcp_port }})
+PartOf=agent-browser.target
+
+[Service]
+# Clients send the Browserless token as a bearer token; the server passes it on
+# to Browserless, which checks it. Listens on every interface; the firewall only
+# lets Tailscale in.
+Environment=TRANSPORT=httpStream
+Environment=PORT={{ agent_browser_browserless_mcp_port }}
+Environment=BROWSERLESS_API_URL=http://127.0.0.1:{{ agent_browser_browserless_port }}
+Environment=ANALYTICS_ENABLED=false
+Environment=OTEL_SDK_DISABLED=true
+ExecStart=/usr/local/bin/browserless-mcp
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=agent-browser.target

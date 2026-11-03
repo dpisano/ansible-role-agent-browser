@@ -1,0 +1,61 @@
+---
+# Browserless and Steel run as containers from one compose project, started at
+# boot by a system unit. Ubuntu's own docker.io and compose plugin are enough.
+- name: Install Docker and the compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Start Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create the compose directory
+  ansible.builtin.file:
+    path: "{{ agent_browser_docker_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Write the compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ agent_browser_docker_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the containers
+
+# The Browserless token; compose reads it from .env next to the compose file.
+- name: Write the compose environment
+  ansible.builtin.template:
+    src: containers.env.j2
+    dest: "{{ agent_browser_docker_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart the containers
+
+- name: Write the containers service
+  ansible.builtin.template:
+    src: system/agent-browser-containers.service.j2
+    dest: /etc/systemd/system/agent-browser-containers.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the containers
+
+- name: Enable and start the containers
+  ansible.builtin.systemd:
+    name: agent-browser-containers.service
+    daemon_reload: true
+    enabled: true
+    state: started

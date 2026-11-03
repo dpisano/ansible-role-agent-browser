@@ -104,3 +104,10 @@
       Camoufox: claude mcp add --transport http camoufox http://{{ agent_browser_host }}:{{ agent_browser_camofox_mcp_port }}/mcp
       --header "Authorization: Bearer <AGENT_BROWSER_CAMOFOX_MCP_API_KEY>"
       {%- endif %}
+      {%- if agent_browser_browserless_enabled | bool %} |
+      Browserless: claude mcp add --transport http browserless http://{{ agent_browser_host }}:{{ agent_browser_browserless_mcp_port }}/mcp
+      --header "Authorization: Bearer <AGENT_BROWSER_BROWSERLESS_TOKEN>"
+      {%- endif %}
+      {%- if agent_browser_steel_enabled | bool %} |
+      Steel: claude mcp add --transport http steel http://{{ agent_browser_host }}:{{ agent_browser_steel_mcp_port }}/mcp
+      {%- endif %}
