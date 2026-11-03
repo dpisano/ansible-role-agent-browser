@@ -1,20 +1,21 @@
 ---
 # Browserless and Steel run as containers from one compose project, started at
-# boot by a system unit. Ubuntu's own docker.io and compose plugin are enough.
-- name: Install Docker and the compose plugin
-  ansible.builtin.apt:
-    name:
-      - docker.io
-      - docker-compose-v2
-    state: present
-  environment:
-    DEBIAN_FRONTEND: noninteractive
+# boot by a system unit. Docker itself comes from another role.
+- name: Check that Docker and the compose plugin are installed
+  ansible.builtin.command: docker compose version
+  register: agent_browser_docker_compose
+  changed_when: false
+  failed_when: false
 
-- name: Start Docker
-  ansible.builtin.systemd:
-    name: docker
-    state: started
-    enabled: true
+- name: Fail if Docker is missing
+  ansible.builtin.assert:
+    that: agent_browser_docker_compose.rc == 0
+    fail_msg: >-
+      Browserless and Steel run as containers, and `docker compose` does not work on the VM.
+      This role does not install Docker: run a Docker role before it (Docker Engine with the
+      compose plugin, running), or set agent_browser_browserless_enabled and
+      agent_browser_steel_enabled to false.
+    quiet: true
 
 - name: Create the compose directory
   ansible.builtin.file:

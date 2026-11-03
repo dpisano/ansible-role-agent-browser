@@ -20,6 +20,7 @@ All of them run on one XFCE desktop (Xorg, logged in automatically), so the agen
 - Proxmox VE, with `qm` on the node the build play runs on, and a storage that allows snippets (the role turns it on).
 - The `community.general` collection (`timezone`, `locale_gen`, `npm`, `ufw`).
 - Optional, a GPU for the VM as a Proxmox **PCI resource mapping** (Datacenter > Resource Mappings), e.g. an SR-IOV virtual function of an Intel Arc Pro B70. Without one, WebGL reports a software renderer (llvmpipe), which bot checks flag.
+- Docker Engine with the compose plugin on the VM, when Browserless or Steel is enabled. The role does not install it: run a Docker role first (it checks and stops with a message if `docker compose` is missing).
 - Tailscale on the VM, e.g. with `artis3n.tailscale.machine` in the provision play (see the example). The role only opens the firewall on `tailscale0`.
 
 ## How it runs
